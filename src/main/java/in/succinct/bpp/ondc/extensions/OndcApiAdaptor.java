@@ -35,10 +35,10 @@ public class OndcApiAdaptor extends NetworkApiAdaptor {
         if (reply.getContext().getAction().startsWith("on_issue")){
             networkByPass = true;
             oReply = adaptor.getIssueTracker().createNetworkResponse(reply);
-        }else if (reply.getContext().getAction().equals("on_receiver_recon")){
+        }/*else if (reply.getContext().getAction().equals("on_receiver_recon")){
             oReply = adaptor.getReceiverReconProvider().createNetworkResponse(reply);
             networkByPass = true;
-        }
+        }*/
 
         callback(adaptor, oReply, networkByPass);
     }
