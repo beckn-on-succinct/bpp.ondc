@@ -6,7 +6,6 @@ import com.venky.swf.db.Database;
 import com.venky.swf.db.table.ModelImpl;
 import com.venky.swf.plugins.background.core.Task;
 import com.venky.swf.plugins.background.core.TaskManager;
-import in.succinct.beckn.Amount;
 import in.succinct.beckn.BreakUp.BreakUpElement;
 import in.succinct.beckn.BreakUp.BreakUpElement.BreakUpCategory;
 import in.succinct.beckn.Cancellation;
@@ -16,10 +15,11 @@ import in.succinct.beckn.Context;
 import in.succinct.beckn.Fulfillment;
 import in.succinct.beckn.Fulfillment.FulfillmentStatus;
 import in.succinct.beckn.Fulfillment.FulfillmentStatus.FulfillmentStatusConvertor;
+import in.succinct.beckn.Invoice;
+import in.succinct.beckn.Invoice.Dispute;
+import in.succinct.beckn.Invoice.Dispute.Disputes;
 import in.succinct.beckn.Item;
 import in.succinct.beckn.Order;
-import in.succinct.beckn.Order.Return;
-import in.succinct.beckn.Order.Returns;
 import in.succinct.beckn.Order.Status;
 import in.succinct.beckn.ReturnReasons.ReturnReasonCode;
 import in.succinct.beckn.TagGroups;
@@ -65,19 +65,20 @@ public class BecknOrderMetaImpl extends ModelImpl<BecknOrderMeta> {
             }
 
             Bucket refund = new Bucket();
-            Returns returns = order.getReturns();
-            if (returns != null ){
-                for (Return ret : returns){
-                    Amount ref = ret.getRefund();
-                    if (ref != null) {
-                        refund.increment(ref.getValue());
-                    }
-                }
+            Disputes returns = new Disputes();
+            
+            for (Invoice invoice : order.getInvoices()) {
+                invoice.getDisputes(true).forEach(d->{
+                    returns.add(d);
+                });
+            }
+            for (Dispute ret : returns){
+                refund.increment(ret.getDisputeAmount());
             }
             Set<String> refundedLineStatus = new HashSet<>(){{
                 add("Cancelled");
-                add("Liquidated");
-                add("Return_Delivered");
+                add("Void");
+                add("Completed");
             }} ;
 
 
@@ -101,10 +102,10 @@ public class BecknOrderMetaImpl extends ModelImpl<BecknOrderMeta> {
                 //line.setQuantity(item.getQuantity().getCount());
                 line.setOrderCategory(getCategory(item.getCategoryId()));
                 line.setSellerNPType("ISN");
-                line.setOrderStatus(order.getState().toString());
+                line.setOrderStatus(order.getStatus().toString());
                 line.setNameOfTheSeller(order.getProvider().getDescriptor().getName());
-                line.setSellerPincode(order.getFulfillment().getStart().getLocation().getAddress().getPinCode());
-                line.setSellerCity(order.getFulfillment().getStart().getLocation().getAddress().getCity());
+                line.setSellerPincode(order.getFulfillment()._getStart().getLocation().getAddress().getPinCode());
+                line.setSellerCity(order.getFulfillment()._getStart().getLocation().getAddress().getCity());
                 line.setSKUCode(item.getDescriptor().getCode());
                 line.setSKUName(item.getDescriptor().getName());
                 line.setNetworkId(meta.getNetworkId());
@@ -114,12 +115,12 @@ public class BecknOrderMetaImpl extends ModelImpl<BecknOrderMeta> {
                     line.setCreateDateTime(TransactionLine.DATE_FORMAT.format(createdAt));
                 }
 
-                Date packedAt = meta.getFulfillmentStatusReachedAt(FulfillmentStatus.Packed);
+                Date packedAt = meta.getFulfillmentStatusReachedAt(FulfillmentStatus.Prepared);
                 if (packedAt != null){
                     line.setReadyToShipAt(TransactionLine.DATE_FORMAT.format(packedAt));
                 }
 
-                Date shippedAt = meta.getFulfillmentStatusReachedAt(FulfillmentStatus.Order_picked_up);
+                Date shippedAt = meta.getFulfillmentStatusReachedAt(FulfillmentStatus.In_Transit);
                 if (shippedAt != null) {
                     line.setShippedAt(TransactionLine.DATE_FORMAT.format(shippedAt));
                 }
@@ -137,9 +138,9 @@ public class BecknOrderMetaImpl extends ModelImpl<BecknOrderMeta> {
 
                 line.setDeliveryType("Off-network");
 
-                line.setDeliveryCity(order.getFulfillment().getEnd().getLocation().getAddress().getCity());
-                line.setDeliveryPincode(order.getFulfillment().getEnd().getLocation().getAddress().getPinCode());
-                if (order.getState() == Status.Cancelled){
+                line.setDeliveryCity(order.getFulfillment()._getEnd().getLocation().getAddress().getCity());
+                line.setDeliveryPincode(order.getFulfillment()._getEnd().getLocation().getAddress().getPinCode());
+                if (order.getStatus() == Status.Cancelled){
                     Cancellation cancellation = order.getCancellation();
                     if (cancellation != null) {
                         line.setCancelledBy(cancellation.getCancelledBy().name());
